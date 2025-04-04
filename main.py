@@ -1,305 +1,173 @@
 #!/usr/bin/env python3
-"""
-Piano Trainer Python Application
--------------------------------
-Main entry point for the Piano Trainer application.
-This file handles the main application loop, mode management,
-and command-line argument parsing.
-
-Version: 1.2.0
-Author: Based on work by zane
-License: MIT
-"""
-
-import os
 import sys
-import argparse
-import logging
+import os
 import pygame
-import pygame.midi
+import argparse
+from pygame.locals import *
 
-# Import application modules
-# These will be implemented in separate files
-from modules.core.app_state import AppState
-from modules.core.event_handler import EventHandler
-from modules.visualization.piano_renderer import PianoRenderer
-from modules.visualization.ui_renderer import UIRenderer
-from modules.midi.midi_player import MidiPlayer
-from modules.midi.midi_input import MidiInput
-from modules.learning.note_generator import NoteGenerator
-from modules.learning.score_tracker import ScoreTracker
-from modules.utility.music_theory import MusicTheory
-from modules.utility.config import Config
+# Import custom modules
+from ui.piano_view import PianoView
+from audio.sound_engine import SoundEngine
+from practice_modes.regular_practice import RegularPracticeMode
+from practice_modes.midi_practice.midi_practice import MIDIPracticeMode
+from midi_processing.midi_loader import MIDILoader
 
-# Set up logging
-def setup_logging(log_level):
-    """Configure application logging"""
-    log_levels = {
-        'debug': logging.DEBUG,
-        'info': logging.INFO,
-        'warning': logging.WARNING,
-        'error': logging.ERROR,
-        'critical': logging.CRITICAL
-    }
-    
-    level = log_levels.get(log_level.lower(), logging.INFO)
-    
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
-        
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler('logs/piano_trainer.log'),
-            logging.StreamHandler()
-        ]
-    )
-    
-    logging.info("Logging initialized at level: %s", log_level)
-
-def parse_arguments():
-    """Parse command-line arguments for the application"""
-    parser = argparse.ArgumentParser(description='Piano Trainer Python Application')
-    
-    parser.add_argument(
-        '--mode', 
-        choices=['freestyle', 'learning', 'analysis'],
-        default='freestyle',
-        help='Application mode: freestyle (default), learning, or analysis'
-    )
-    
-    parser.add_argument(
-        '--midi-file',
-        type=str,
-        help='Path to a MIDI file to load at startup'
-    )
-    
-    parser.add_argument(
-        '--midi-input-device',
-        type=int,
-        help='MIDI input device ID to use (default: auto-detect)'
-    )
-    
-    parser.add_argument(
-        '--midi-output-device',
-        type=int,
-        help='MIDI output device ID to use (default: auto-detect)'
-    )
-    
-    parser.add_argument(
-        '--log-level',
-        choices=['debug', 'info', 'warning', 'error', 'critical'],
-        default='info',
-        help='Set the logging level'
-    )
-    
-    parser.add_argument(
-        '--fullscreen',
-        action='store_true',
-        help='Start the application in fullscreen mode'
-    )
-    
-    parser.add_argument(
-        '--difficulty',
-        choices=['easy', 'medium', 'hard'],
-        default='medium',
-        help='Difficulty level for learning mode'
-    )
-    
-    return parser.parse_args()
-
-class PianoTrainerApp:
-    """Main Piano Trainer application class"""
-    
-    def __init__(self, args):
-        """Initialize the Piano Trainer application"""
-        self.args = args
-        self.running = False
-        self.config = Config()
-        
-        # Initialize Pygame
+class EnhancedPianoTrainer:
+    def __init__(self):
+        """Initialize the Enhanced Piano Trainer application."""
+        # Initialize pygame
         pygame.init()
-        pygame.midi.init()
+        pygame.display.set_caption("Enhanced Piano Trainer")
         
-        # Set up display
-        self.width, self.height = 1280, 720
-        self.display_flags = pygame.HWSURFACE | pygame.DOUBLEBUF
+        # Initialize screen
+        self.screen_width = 1280
+        self.screen_height = 720
+        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         
-        if args.fullscreen:
-            self.display_flags |= pygame.FULLSCREEN
-            
-        self.screen = pygame.display.set_mode((self.width, self.height), self.display_flags)
-        pygame.display.set_caption("Piano Trainer v1.2.0")
+        # Initialize clock for controlling frame rate
+        self.clock = pygame.time.Clock()
+        self.fps = 60
         
-        # Initialize application state
-        self.app_state = AppState(initial_mode=args.mode)
+        # Initialize components
+        self.sound_engine = SoundEngine(os.path.join("media", "samples"))
+        self.piano_view = PianoView(self.screen, self.screen_width, self.screen_height)
+        self.midi_loader = MIDILoader(os.path.join("media", "midi"))
         
-        # Initialize modules
-        self.init_modules()
+        # Initialize practice modes
+        self.regular_practice = RegularPracticeMode(self.piano_view, self.sound_engine)
+        self.midi_practice = MIDIPracticeMode(self.piano_view, self.sound_engine, self.midi_loader)
         
-        logging.info("Piano Trainer initialized in %s mode", args.mode)
-    
-    def init_modules(self):
-        """Initialize application modules"""
-        # These will be implemented in separate module files
-        # For now, we'll just create placeholder instances
+        # Set default active mode
+        self.active_mode = self.regular_practice
         
-        self.event_handler = EventHandler(self.app_state)
-        self.piano_renderer = PianoRenderer(self.screen, self.config)
-        self.ui_renderer = UIRenderer(self.screen, self.app_state, self.config)
+        # Menu state
+        self.in_menu = True
+        self.menu_options = [
+            "Regular Practice", 
+            "MIDI Practice", 
+            "Settings", 
+            "Exit"
+        ]
+        self.selected_option = 0
         
-        # MIDI modules
-        midi_input_id = self.args.midi_input_device
-        midi_output_id = self.args.midi_output_device
+        # Font for UI
+        self.font = pygame.font.SysFont("Arial", 30)
+        self.title_font = pygame.font.SysFont("Arial", 50, bold=True)
         
-        self.midi_player = MidiPlayer(midi_output_id)
-        self.midi_input = MidiInput(midi_input_id)
+        # Color definitions
+        self.WHITE = (255, 255, 255)
+        self.BLACK = (0, 0, 0)
+        self.BLUE = (0, 0, 255)
+        self.LIGHT_BLUE = (100, 100, 255)
+        self.GRAY = (150, 150, 150)
         
-        # Learning mode modules
-        self.note_generator = NoteGenerator(self.app_state)
-        self.score_tracker = ScoreTracker()
-        
-        # Utility modules
-        self.music_theory = MusicTheory()
-        
-        # Load MIDI file if specified
-        if self.args.midi_file:
-            try:
-                self.midi_player.load_file(self.args.midi_file)
-                logging.info("Loaded MIDI file: %s", self.args.midi_file)
-            except Exception as e:
-                logging.error("Failed to load MIDI file: %s", str(e))
-    
-    def run(self):
-        """Main application loop"""
+        # Application state
         self.running = True
-        clock = pygame.time.Clock()
-        
-        while self.running:
-            # Process events
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.running = False
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
+    
+    def handle_events(self):
+        """Handle pygame events."""
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                self.running = False
+                
+            elif event.type == KEYDOWN:
+                if event.key == K_ESCAPE:
+                    if not self.in_menu:
+                        self.in_menu = True
+                    else:
                         self.running = False
-                    elif event.key == pygame.K_F1:
-                        self.app_state.set_mode('freestyle')
-                    elif event.key == pygame.K_F2:
-                        self.app_state.set_mode('learning')
-                    elif event.key == pygame.K_F3:
-                        self.app_state.set_mode('analysis')
-                        
-                # Pass event to event handler
-                self.event_handler.handle_event(event)
-            
-            # Process MIDI input
-            midi_events = self.midi_input.get_events()
-            for midi_event in midi_events:
-                self.event_handler.handle_midi_event(midi_event)
-            
-            # Update game state based on current mode
-            if self.app_state.mode == 'freestyle':
-                self.update_freestyle_mode()
-            elif self.app_state.mode == 'learning':
-                self.update_learning_mode()
-            elif self.app_state.mode == 'analysis':
-                self.update_analysis_mode()
-            
-            # Render the current frame
-            self.render()
-            
-            # Cap the frame rate
-            clock.tick(60)
-        
-        # Clean up resources
-        self.cleanup()
+                
+                # Menu navigation
+                if self.in_menu:
+                    if event.key == K_UP:
+                        self.selected_option = (self.selected_option - 1) % len(self.menu_options)
+                    elif event.key == K_DOWN:
+                        self.selected_option = (self.selected_option + 1) % len(self.menu_options)
+                    elif event.key == K_RETURN:
+                        self.execute_menu_option(self.selected_option)
+                else:
+                    # Pass events to active mode
+                    self.active_mode.handle_event(event)
     
-    def update_freestyle_mode(self):
-        """Update application state in freestyle mode"""
-        # In freestyle mode, we just need to update the MIDI player
-        # and respond to user input
-        self.midi_player.update()
+    def execute_menu_option(self, option):
+        """Execute the selected menu option."""
+        if option == 0:  # Regular Practice
+            self.active_mode = self.regular_practice
+            self.in_menu = False
+        elif option == 1:  # MIDI Practice
+            self.active_mode = self.midi_practice
+            self.in_menu = False
+        elif option == 2:  # Settings
+            # Will implement settings later
+            pass
+        elif option == 3:  # Exit
+            self.running = False
     
-    def update_learning_mode(self):
-        """Update application state in learning mode"""
-        # In learning mode, we need to:
-        # 1. Update falling notes
-        # 2. Check for hits/misses
-        # 3. Update score
-        self.note_generator.update()
-        self.score_tracker.update(self.note_generator.active_notes, self.midi_input.pressed_keys)
-        self.midi_player.update()
-    
-    def update_analysis_mode(self):
-        """Update application state in analysis mode"""
-        # In analysis mode, we:
-        # 1. Play the MIDI file
-        # 2. Show detailed information about the notes
-        self.midi_player.update()
-    
-    def render(self):
-        """Render the current frame"""
-        # Clear the screen
-        self.screen.fill((0, 0, 0))
+    def draw_menu(self):
+        """Draw the main menu."""
+        self.screen.fill(self.BLACK)
         
-        # Render the piano keyboard
-        self.piano_renderer.render(
-            self.midi_player.current_notes,
-            self.midi_input.pressed_keys
-        )
+        # Draw title
+        title = self.title_font.render("Enhanced Piano Trainer", True, self.WHITE)
+        title_rect = title.get_rect(center=(self.screen_width // 2, 100))
+        self.screen.blit(title, title_rect)
         
-        # Render mode-specific UI elements
-        if self.app_state.mode == 'freestyle':
-            self.ui_renderer.render_freestyle_mode()
-        elif self.app_state.mode == 'learning':
-            self.ui_renderer.render_learning_mode(
-                self.note_generator.active_notes,
-                self.score_tracker.score,
-                self.score_tracker.accuracy
-            )
-        elif self.app_state.mode == 'analysis':
-            self.ui_renderer.render_analysis_mode(
-                self.midi_player.midi_data
-            )
+        # Draw menu options
+        for i, option in enumerate(self.menu_options):
+            color = self.LIGHT_BLUE if i == self.selected_option else self.WHITE
+            text = self.font.render(option, True, color)
+            text_rect = text.get_rect(center=(self.screen_width // 2, 250 + i * 60))
+            self.screen.blit(text, text_rect)
         
-        # Update the display
+        # Draw instructions
+        instructions = self.font.render("Use UP/DOWN arrows to navigate, ENTER to select", True, self.GRAY)
+        instructions_rect = instructions.get_rect(center=(self.screen_width // 2, self.screen_height - 100))
+        self.screen.blit(instructions, instructions_rect)
+        
         pygame.display.flip()
     
-    def cleanup(self):
-        """Clean up resources before exiting"""
-        logging.info("Shutting down Piano Trainer")
+    def run(self):
+        """Main application loop."""
+        while self.running:
+            self.handle_events()
+            
+            if self.in_menu:
+                self.draw_menu()
+            else:
+                # Update and render active mode
+                self.active_mode.update()
+                self.active_mode.render()
+            
+            self.clock.tick(self.fps)
         
-        # Close MIDI devices
-        if hasattr(self, 'midi_player'):
-            self.midi_player.cleanup()
-        
-        if hasattr(self, 'midi_input'):
-            self.midi_input.cleanup()
-        
-        # Quit Pygame
-        pygame.midi.quit()
+        # Cleanup
         pygame.quit()
+        sys.exit()
 
-def main():
-    """Application entry point"""
-    # Parse command-line arguments
-    args = parse_arguments()
-    
-    # Set up logging
-    setup_logging(args.log_level)
-    
-    try:
-        # Create and run the application
-        app = PianoTrainerApp(args)
-        app.run()
-    except Exception as e:
-        logging.critical("Unhandled exception: %s", str(e), exc_info=True)
-        return 1
-    
-    return 0
+
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="Enhanced Piano Trainer")
+    parser.add_argument("--midi", type=str, help="Path to MIDI file to load on startup")
+    parser.add_argument("--mode", type=str, choices=["regular", "midi"], 
+                        default="regular", help="Practice mode to start with")
+    return parser.parse_args()
+
 
 if __name__ == "__main__":
-    sys.exit(main())
+    args = parse_arguments()
+    app = EnhancedPianoTrainer()
+    
+    # Handle command line arguments
+    if args.midi:
+        app.midi_practice.load_midi(args.midi)
+        app.active_mode = app.midi_practice
+        app.in_menu = False
+    
+    if args.mode == "midi" and not args.midi:
+        app.active_mode = app.midi_practice
+        app.in_menu = False
+    
+    # Run the application
+    app.run()
 
