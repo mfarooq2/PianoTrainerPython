@@ -22,6 +22,8 @@ class SoundEngine:
             buffer: Audio buffer size (smaller = less latency but potential audio issues)
         """
         # Initialize pygame mixer
+        if pygame.mixer.get_init():
+            pygame.mixer.quit()
         pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=buffer)
         pygame.mixer.set_num_channels(channels)
         
@@ -232,4 +234,5 @@ if __name__ == "__main__":
     
     # Clean up
     engine.cleanup()
+    pygame.mixer.quit()
 

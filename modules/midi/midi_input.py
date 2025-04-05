@@ -186,10 +186,11 @@ class MIDIInput:
             velocity = midi_data[2]
             
             # Some devices send Note On with velocity 0 instead of Note Off
+            if velocity > 0:
                 self._handle_note_on(note, velocity)
                 self.active_notes.add(note)
-            elif velocity == 0:
-                self._handle_note_off(note)
+            else:
+                self._handle_note_off(note) 
                 self.active_notes.discard(note)
                 
         # Note Off event (0x80-0x8F)
@@ -212,13 +213,19 @@ class MIDIInput:
             note: MIDI note number (0-127)
             velocity: Note velocity (1-127)
         """
-        # Update app state with the pressed note
-        self.app_state.handle_midi_note_on(note, velocity)
-        
-        # Call the callback if registered
-        if self.on_note_on:
-            self.on_note_on(note, velocity)
-    
+        try:
+            # Ensure app_state is valid before calling its method
+            if self.app_state:
+                self.app_state.handle_midi_note_on(note, velocity)
+            else:
+                print("Warning: app_state is not initialized. Note-On event ignored.")
+            
+            # Call the callback if registered
+            if self.on_note_on:
+                self.on_note_on(note, velocity)
+        except Exception as e:
+            print(f"Error handling Note-On event (note: {note}, velocity: {velocity}): {e}")
+
     def _handle_note_off(self, note: int):
         """
         Handle a note-off MIDI event.
@@ -226,12 +233,18 @@ class MIDIInput:
         Args:
             note: MIDI note number (0-127)
         """
-        # Update app state with the released note
-        self.app_state.handle_midi_note_off(note)
-        
-        # Call the callback if registered
-        if self.on_note_off:
-            self.on_note_off(note)
+        try:
+            # Ensure app_state is valid before calling its method
+            if self.app_state:
+                self.app_state.handle_midi_note_off(note)
+            else:
+                print("Warning: app_state is not initialized. Note-Off event ignored.")
+            
+            # Call the callback if registered
+            if self.on_note_off:
+                self.on_note_off(note)
+        except Exception as e:
+            print(f"Error handling Note-Off event (note: {note}): {e}")
     
     def _handle_control_change(self, control: int, value: int):
         """
@@ -274,4 +287,3 @@ class MIDIInput:
             Tuple of (device_id, device_name) or (None, "") if not connected
         """
         return (self.connected_device_id, self.connected_device_name)
-

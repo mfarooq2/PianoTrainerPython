@@ -224,7 +224,7 @@ class NoteGenerator:
 
         # Time management
         self.start_time = None
-        self.current_time = None
+        self.current_time = 0.0
         self.paused = False
         self.pause_start_time = None
         self.total_pause_time = 0
@@ -340,15 +340,6 @@ class NoteGenerator:
         for note in self.active_notes:
             hit_status, score = note.check_hit(note_number, self.current_time)
             if hit_status:
-                if hit_status == "perfect":
-                    self.perfect_hits += 1
-                elif hit_status == "good":
-                    self.good_hits += 1
-                elif hit_status == "hit":
-                    self.hits += 1
-                elif hit_status == "wrong":
-                    self.wrong_notes += 1
-                self.score += score
                 return True
         return False
 
