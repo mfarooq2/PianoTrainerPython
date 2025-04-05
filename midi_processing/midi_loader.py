@@ -202,10 +202,37 @@ class MidiLoader:
             key_signature=key_signature
         )
     
+    def _get_tempo_changes(self) -> List[Tuple[float, int]]:
+        """
+        Extract tempo changes from the MIDI file.
+
+        Returns:
+            A list of tuples, where each tuple contains the time (in seconds) and the
+            tempo (in microseconds per beat) at which the tempo change occurs.
+        """
+        if not self.current_midi:
+            return []
+
+        tempo_changes = []
+        current_time = 0.0
+        current_tempo = 500000  # Default tempo (120 BPM)
+
+        for track in self.current_midi.tracks:
+            for msg in track:
+                current_time += mido.tick2second(
+                    msg.time, self.current_midi.ticks_per_beat, current_tempo
+                )
+                if msg.type == "set_tempo":
+                    current_tempo = msg.tempo
+                    tempo_changes.append((current_time, current_tempo))
+
+        # Ensure tempo changes are sorted by time
+        tempo_changes.sort()
+        return tempo_changes
+
     def _get_tempo_at_time(self, time_seconds: float) -> int:
         """
         Get the tempo at a specific time point in the MIDI file.
-        This is a simplified implementation that doesn't handle tempo changes.
         
         Args:
             time_seconds: The time in seconds.
@@ -390,5 +417,17 @@ class MidiLoader:
         sorted_notes = sorted(self.note_events, key=lambda x: x.start_time)
         
         chords = []
-        current_chord = [sorted_
-
+        current_chord = [sorted_notes[0]]
+        
+        for note in sorted_notes[1:]:
+            if note.start_time - current_chord[0].start_time <= max_start_diff:
+                current_chord.append(note)
+            else:
+                chords.append(current_chord)
+                current_chord = [note]
+        
+        # Add the last chord
+        if current_chord:
+            chords.append(current_chord)
+        
+        return chords

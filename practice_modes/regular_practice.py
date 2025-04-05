@@ -1,6 +1,6 @@
 import random
 import pygame
-from typing import List, Dict, Tuple, Optional, Callable
+from typing import List, Dict, Tuple, Optional, Callable, Set
 
 # Import from other modules
 from enhanced_piano_trainer.midi_processing.midi_loader import MidiLoader
@@ -85,7 +85,7 @@ class NoteIdentificationPractice(PracticeMode):
         """Select a random note for the user to identify"""
         # Range changes based on difficulty level
         min_note = 60 - (self.difficulty * 5)  # C4 (middle C) as baseline
-        max_note = 72 + (self.difficulty * 5)  # C5 + difficulty range
+        max_note = 72  (self.difficulty * 5)  # C5  difficulty range
         
         # Ensure we're within MIDI range (0-127)
         min_note = max(21, min_note)  # A0
@@ -130,10 +130,10 @@ class NoteIdentificationPractice(PracticeMode):
     
     def check_note(self, played_note: int):
         """Check if the played note matches the current note"""
-        self.total_attempts += 1
+        self.total_attempts = 1
         
         if played_note == self.current_note:
-            self.correct_answers += 1
+            self.correct_answers = 1
             self.feedback_message = "Correct!"
             # Wait a moment before selecting a new note
             pygame.time.delay(500)
@@ -152,28 +152,24 @@ class NoteIdentificationPractice(PracticeMode):
     
     def draw(self, surface: pygame.Surface) -> None:
         """Draw practice-specific UI elements"""
-        # Draw instructions
+        # Instructions
         instruction_text = self.font.render(self.instructions, True, (255, 255, 255))
         surface.blit(instruction_text, (20, 20))
-        
-        # Draw timer
-        timer_text = self.font.render(f"Time: {int(self.time_remaining)}s", True, (255, 255, 255))
-        surface.blit(timer_text, (surface.get_width() - 150, 20))
-        
-        # Draw score
-        score_text = self.font.render(f"Score: {self.correct_answers}/{self.total_attempts}", True, (255, 255, 255))
-        surface.blit(score_text, (surface.get_width() - 150, 60))
-        
-        # Draw feedback
+
+        # Feedback
         if self.feedback_message:
             feedback_text = self.font.render(self.feedback_message, True, (255, 215, 0))
             surface.blit(feedback_text, (20, 60))
-            
-        # Draw current note to identify
-        if self.current_note and self.is_active:
-            note_text = self.font.render(f"Identify: {self.get_note_name(self.current_note)}", True, (255, 215, 0))
-            text_rect = note_text.get_rect(center=(surface.get_width() // 2, 100))
-            surface.blit(note_text, text_rect)
+
+        # Score
+        score_text = self.font.render(f"Score: {self.correct_answers}/{self.total_attempts}", True, (255, 255, 255))
+        score_rect = score_text.get_rect(topright=(surface.get_width() - 20, 20))
+        surface.blit(score_text, score_rect)
+
+        # Progress (Time Remaining)
+        progress_text = self.font.render(f"Time: {int(self.time_remaining)}s", True, (255, 255, 255))
+        progress_rect = progress_text.get_rect(topright=(surface.get_width() - 20, 60))
+        surface.blit(progress_text, progress_rect)
     
     def get_feedback(self) -> Dict:
         """Get session feedback metrics"""
@@ -250,74 +246,153 @@ class ScalePractice(PracticeMode):
             if note != self.expecting_note:
                 self.piano_view.highlight_key(note, (100, 100, 255), priority=1)
     
+    def draw(self, surface: pygame.Surface) -> None:
+        """Draw practice-specific UI elements"""
+        # Instructions
+        instruction_text = self.font.render(self.instructions, True, (255, 255, 255))
+        surface.blit(instruction_text, (20, 20))
+
+        # Feedback
+        if self.feedback_message:
+            feedback_text = self.font.render(self.feedback_message, True, (255, 215, 0))
+            surface.blit(feedback_text, (20, 60))
+
+        # Score
+        score_text = self.font.render(f"Score: 0", True, (255, 255, 255))  # Initialize score to 0
+        score_rect = score_text.get_rect(topright=(surface.get_width() - 20, 20))
+        surface.blit(score_text, score_rect)
+
+        # Current scale name
+        scale_name_text = self.font.render(f"Scale: {self.current_scale_name}", True, (255, 255, 255))
+        scale_name_rect = scale_name_text.get_rect(topright=(surface.get_width() - 20, 60))
+        surface.blit(scale_name_text, scale_name_rect)
+    
+    def get_feedback(self) -> Dict:
+        """Get session feedback metrics"""
+        accuracy = 0.0
+        return {
+            "score": 0,
+            "accuracy": accuracy,
+        }
+
+class ChordPractice(PracticeMode):
+    """Practice mode for learning and playing chords from MIDI files."""
+
+    def __init__(self, piano_view: PianoView, sound_engine: SoundEngine):
+        super().__init__(piano_view, sound_engine)
+        self.midi_loader = MidiLoader()
+        self.available_chords: List[List[int]] = []  # List of chords (list of note numbers)
+        self.current_chord: List[int] = []
+        self.font = pygame.font.Font(None, 36)
+        self.instructions = "Play the highlighted chord"
+        self.feedback_message = ""
+        self.correct_chords = 0
+        self.total_attempts = 0
+
+    def start(self):
+        super().start()
+        self.correct_chords = 0
+        self.total_attempts = 0
+
+        # Load a default MIDI file for chord extraction (replace with actual file path if available)
+        midi_file_path = "resources/test_midi.mid"
+        if not self.midi_loader.load_midi_file(midi_file_path):
+            self.feedback_message = "Error loading MIDI file for chords."
+            self.is_active = False
+            return
+
+        # Extract chords (assuming extract_chords now returns a list of lists of note numbers)
+        self.available_chords = [[note.note for note in chord] for chord in self.midi_loader.extract_chords()]
+
+        if not self.available_chords:
+            self.feedback_message = "No chords found in the MIDI file."
+            self.is_active = False
+            return
+
+        self.select_random_chord()
+
+    def select_random_chord(self):
+        """Select a random chord from the available chords and highlight it on the piano."""
+        self.current_chord = random.choice(self.available_chords)
+        self.piano_view.reset_highlights()
+        for note in self.current_chord:
+            self.piano_view.highlight_key(note, (0, 255, 255))  # Cyan for chords
+
     def update(self, events: List[pygame.event.Event], midi_inputs: List = None) -> None:
-        """Update the practice session based on user input"""
+        """Update the practice session based on user input."""
         if not self.is_active:
             return
-            
-        # Process MIDI inputs
-        if midi_inputs:
-            for note, velocity, _ in midi_inputs:
-                if velocity > 0:  # Note on
-                    self.check_note(note)
-        
-        # Check for keyboard input (for testing without MIDI keyboard)
-        for event in events:
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RIGHT:
-                    # Skip to next note (for demonstration/testing)
-                    self.advance_note()
-                elif event.key == pygame.K_SPACE and not self.is_active:
-                    self.start()
-    
-    def check_note(self, played_note: int):
-        """Check if the played note matches the expected note in the scale"""
-        if played_note == self.expecting_note:
-            self.feedback_message = "Correct!"
-            
-            # Play the note (in case it wasn't played by a MIDI device)
-            self.sound_engine.play_note(played_note, velocity=80)
-            
-            # Move to the next note in the scale
-            self.advance_note()
-        else:
-            self.feedback_message = "Incorrect note"
-            
-            # Highlight the wrong note in red briefly
-            self.piano_view.highlight_key(played_note, (255, 0, 0), duration=500)
-            
-            # Play the correct note as a hint
-            self.sound_engine.play_note(self.expecting_note, velocity=60)
-    
-    def advance_note(self):
-        """Advance to the next note in the scale sequence"""
-        self.current_position += self.direction
-        
-        # If we've reached the end of the scale going up
-        if self.current_position >= len(self.current_scale):
-            if self.difficulty >= 2:
-                # For higher difficulties, go back down the scale
-                self.direction = -1
-                self.current_position = len(self.current_scale) - 2  # Second-to-last note
-            else:
-                # For beginner difficulty, just restart at the beginning
-                self.feedback_message = "Scale complete! Try another one."
-                self.select_scale()
-                return
-                
-        # If we've reached the beginning of the scale going down
-        elif self.current_position < 0:
-            self.feedback_message = "Scale complete! Try another one."
-            self.select_scale()
-            return
-            
-        # Update the expected note
-        self.expecting_note = self.current_scale[self.current_position]
-        
-        # Update highlights
-        self.piano_view.reset_highlights()
-        self.piano_view.highlight_key(self.expecting_note, (0, 255, 0))
-        
-        # Highlight the entire scale with a different color
-        for note
 
+        if midi_inputs:
+            # Check for note on events and collect played notes
+            played_notes = {note for note, velocity, _ in midi_inputs if velocity > 0}
+
+            # Check if the played notes match the current chord
+            if set(self.current_chord) == played_notes:
+                self.correct_chords = 1
+                self.total_attempts = 1
+                self.feedback_message = "Correct chord!"
+                self.select_random_chord()
+            elif played_notes:
+                self.total_attempts = 1
+                self.feedback_message = "Incorrect chord."
+                self.provide_chord_feedback(played_notes)
+
+    def provide_chord_feedback(self, played_notes: Set[int]):
+        """Provides specific feedback about played chord (missing or wrong notes)"""
+        missing_notes = set(self.current_chord) - played_notes
+        wrong_notes = played_notes - set(self.current_chord)
+
+        feedback_parts = []
+        if missing_notes:
+            missing_note_names = ", ".join([self.midi_loader.get_note_name(note) for note in missing_notes])
+            feedback_parts.append(f"Missing notes: {missing_note_names}")
+        if wrong_notes:
+            wrong_note_names = ", ".join([self.midi_loader.get_note_name(note) for note in wrong_notes])
+            feedback_parts.append(f"Wrong notes: {wrong_note_names}")
+
+        if feedback_parts:
+            self.feedback_message = ", ".join(feedback_parts)
+        else:
+            self.feedback_message = "Incorrect chord."  # Fallback if no specific feedback
+
+    def draw(self, surface: pygame.Surface) -> None:
+        """Draw practice-specific UI elements."""
+        # Draw instructions
+        instruction_text = self.font.render(self.instructions, True, (255, 255, 255))
+        surface.blit(instruction_text, (20, 20))
+
+        # Draw current chord
+        chord_name = ", ".join([self.midi_loader.get_note_name(note) for note in self.current_chord])
+        chord_text = self.font.render(f"Chord: {chord_name}", True, (0, 255, 255))
+        surface.blit(chord_text, (20, 60))
+
+        # Draw feedback
+        if self.feedback_message:
+            feedback_text = self.font.render(self.feedback_message, True, (255, 215, 0))
+            surface.blit(feedback_text, (20, 100))
+
+    def get_feedback(self) -> Dict:
+        """Get session feedback metrics."""
+        accuracy = (self.correct_chords / self.total_attempts * 100) if self.total_attempts > 0 else 0
+        return {
+            "score": self.correct_chords,
+            "attempts": self.total_attempts,
+            "accuracy": accuracy,
+        }
+
+    def draw(self, surface: pygame.Surface) -> None:
+        """Draw practice-specific UI elements."""
+        # Instructions
+        instruction_text = self.font.render(self.instructions, True, (255, 255, 255))
+        surface.blit(instruction_text, (20, 20))
+
+        # Feedback
+        if self.feedback_message:
+            feedback_text = self.font.render(self.feedback_message, True, (255, 215, 0))
+            surface.blit(feedback_text, (20, 100))
+
+        # Score
+        score_text = self.font.render(f"Score: {self.correct_chords}/{self.total_attempts}", True, (255, 255, 255))
+        score_rect = score_text.get_rect(topright=(surface.get_width() - 20, 20))
+        surface.blit(score_text, score_rect)
