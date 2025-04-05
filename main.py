@@ -7,9 +7,9 @@ from pygame.locals import *
 
 # Import custom modules
 from ui.piano_view import PianoView
-from audio.sound_engine import SoundEngine
-from practice_modes.regular_practice import RegularPracticeMode
-from practice_modes.midi_practice.midi_practice import MIDIPracticeMode
+from audio.sound_engine import SoundEngine, Note
+from practice_modes.regular_practice import PracticeMode
+from practice_modes.midi_practice import MIDIPracticeMode
 from midi_processing.midi_loader import MIDILoader
 
 class EnhancedPianoTrainer:
@@ -34,7 +34,7 @@ class EnhancedPianoTrainer:
         self.midi_loader = MIDILoader(os.path.join("media", "midi"))
         
         # Initialize practice modes
-        self.regular_practice = RegularPracticeMode(self.piano_view, self.sound_engine)
+        self.regular_practice = PracticeMode(self.piano_view, self.sound_engine)
         self.midi_practice = MIDIPracticeMode(self.piano_view, self.sound_engine, self.midi_loader)
         
         # Set default active mode
@@ -170,4 +170,3 @@ if __name__ == "__main__":
     
     # Run the application
     app.run()
-

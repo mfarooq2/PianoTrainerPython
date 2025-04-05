@@ -5,6 +5,12 @@ from typing import Dict, Optional, List, Tuple
 import pygame.mixer
 
 
+class Note:
+    def __init__(self, name, frequency):
+        self.name = name
+        self.frequency = frequency
+
+
 class SoundEngine:
     """
     Sound engine for piano note playback.

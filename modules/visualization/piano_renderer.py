@@ -1,7 +1,7 @@
 import pygame
 import numpy as np
 from ..utility.config import Config
-from ..utility.constants import WHITE_KEY_COLOR, BLACK_KEY_COLOR, WHITE_KEY_PRESSED_COLOR, BLACK_KEY_PRESSED_COLOR
+from modules.utility.constants import WHITE_KEY_COLOR, BLACK_KEY_COLOR, WHITE_KEY_PRESSED_COLOR, BLACK_KEY_PRESSED_COLOR
 
 class PianoRenderer:
     """
@@ -423,6 +423,10 @@ class PianoRenderer:
         self.surface.blit(ripple_surface, (rect.x - 5, rect.y - 5))
     
     def resize(self, new_width: int, new_height: int):
-        """
-        Handle resizing of
-
+        """Handle resizing of the piano keyboard."""
+        if self.surface:
+            self.surface = pygame.Surface((new_width, new_height))
+            self.setup(self.surface)
+            
+            # Recalculate key positions
+            self._calculate_key_positions()
